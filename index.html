@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InkPDF — PDF Editor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e10;
+    --surface: #18181c;
+    --surface-2: #222228;
+    --surface-3: #2c2c34;
+    --border: #333340;
+    --text: #e8e8ed;
+    --text-dim: #8888a0;
+    --accent: #ff6b3d;
+    --accent-glow: rgba(255,107,61,0.25);
+    --accent-2: #3d9eff;
+    --accent-3: #6bff8e;
+    --danger: #ff4757;
+    --radius: 10px;
+    --shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+    flex-shrink: 0;
+  }
+  .logo {
+    font-family: 'Instrument Serif', serif;
+    font-size: 26px;
+    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo .dot { color: var(--accent); }
+  .logo svg { width: 28px; height: 28px; }
+
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+
+  .btn {
+    padding: 8px 18px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover { background: var(--surface-3); border-color: var(--text-dim); }
+  .btn-accent {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 700;
+  }
+  .btn-accent:hover { 
+    background: #ff8560; 
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+  .btn:disabled { opacity: 0.4; pointer-events: none; }
+  .btn svg { width: 16px; height: 16px; }
+
+  .page-info {
+    font-size: 13px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .page-info input {
+    width: 36px;
+    text-align: center;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 4px;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .toolbar.visible { display: flex; }
+  .toolbar .sep {
+    width: 1px;
+    height: 28px;
+    background: var(--border);
+    margin: 0 6px;
+  }
+
+  .tool-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .tool-btn:hover { background: var(--surface-2); color: var(--text); }
+  .tool-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+  .tool-btn svg { width: 18px; height: 18px; }
+
+  .tool-btn .tooltip {
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface-3);
+    color: var(--text);
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 200;
+  }
+  .tool-btn:hover .tooltip { opacity: 1; }
+
+  .color-pick {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    cursor: pointer;
+    padding: 0;
+    overflow: hidden;
+    background: none;
+  }
+  .color-pick input[type="color"] {
+    width: 44px;
+    height: 44px;
+    border: none;
+    cursor: pointer;
+    transform: translate(-7px, -7px);
+  }
+
+  .size-slider {
+    width: 80px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  label.tool-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── MAIN AREA ── */
+  .main-area {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    padding: 30px;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(255,107,61,0.03) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(61,158,255,0.03) 0%, transparent 50%),
+      var(--bg);
+  }
+
+  /* ── UPLOAD SCREEN ── */
+  .upload-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+  }
+  .upload-zone {
+    width: 520px;
+    max-width: 90vw;
+    padding: 60px 40px;
+    border: 2px dashed var(--border);
+    border-radius: 20px;
+    background: var(--surface);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--accent-glow) 0%, transparent 60%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .upload-zone:hover { border-color: var(--accent); }
+  .upload-zone:hover::before { opacity: 1; }
+  .upload-zone.dragover { border-color: var(--accent); transform: scale(1.02); }
+  .upload-zone.dragover::before { opacity: 1; }
+
+  .upload-zone > * { position: relative; z-index: 1; }
+  .upload-icon {
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 20px;
+    background: var(--surface-2);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .upload-icon svg { width: 36px; height: 36px; color: var(--accent); }
+  .upload-zone h2 {
+    font-family: 'Instrument Serif', serif;
+    font-size: 28px;
+    margin-bottom: 8px;
+    font-weight: 400;
+  }
+  .upload-zone p { color: var(--text-dim); font-size: 14px; }
+  .upload-zone .browse {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 10px 28px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: var(--radius);
+    font-weight: 700;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+  .upload-zone:hover .browse { box-shadow: 0 0 24px var(--accent-glow); }
+
+  #fileInput { display: none; }
+
+  /* ── PDF VIEWER ── */
+  .pdf-container { display: none; flex-direction: column; align-items: center; gap: 20px; }
+  .pdf-container.visible { display: flex; }
+
+  .page-wrapper {
+    position: relative;
+    box-shadow: var(--shadow);
+    border-radius: 4px;
+    overflow: hidden;
+    background: white;
+  }
+  .page-wrapper canvas { display: block; }
+
+  .overlay-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
+    cursor: crosshair;
+  }
+
+  /* text annotations layer */
+  .text-annotations {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 15;
+    pointer-events: none;
+  }
+  .text-annotation {
+    position: absolute;
+    pointer-events: auto;
+    min-width: 60px;
+    min-height: 24px;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    padding: 4px 6px;
+    background: rgba(255,255,255,0.85);
+    border: 1.5px dashed var(--accent);
+    border-radius: 4px;
+    color: #111;
+    cursor: move;
+    user-select: text;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .text-annotation:focus {
+    border-style: solid;
+    box-shadow: 0 0 0 2px var(--accent-glow);
+  }
+  .text-annotation .delete-ann {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 20px;
+    height: 20px;
+    background: var(--danger);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    font-size: 12px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    z-index: 20;
+  }
+  .text-annotation:hover .delete-ann,
+  .text-annotation:focus .delete-ann { display: flex; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-size: 14px;
+    z-index: 9999;
+    transition: transform 0.3s ease;
+    box-shadow: var(--shadow);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ── LOADING ── */
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(14,14,16,0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .loading-overlay.visible { display: flex; }
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── ZOOM CONTROLS ── */
+  .zoom-controls {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: none;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+    z-index: 50;
+    box-shadow: var(--shadow);
+  }
+  .zoom-controls.visible { display: flex; }
+  .zoom-controls button {
+    width: 36px; height: 36px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 500;
+  }
+  .zoom-controls button:hover { background: var(--surface-2); }
+  .zoom-controls span {
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    min-width: 44px;
+    justify-content: center;
+  }
+
+  /* ── FILE NAME ── */
+  .file-name {
+    font-size: 13px;
+    color: var(--text-dim);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 680px) {
+    header { padding: 10px 14px; }
+    .logo { font-size: 20px; }
+    .toolbar { padding: 8px 14px; }
+    .main-area { padding: 16px; }
+    .upload-zone { padding: 40px 24px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="3" width="18" height="22" rx="3" stroke="currentColor" stroke-width="2"/><path d="M8 9h8M8 13h6M8 17h8" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/><path d="M22 8l4 4-4 4" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Ink<span class="dot">PDF</span>
+  </div>
+  <div class="header-actions">
+    <span class="file-name" id="fileName"></span>
+    <div class="page-info" id="pageInfo" style="display:none;">
+      <button class="btn" id="prevPage" onclick="changePage(-1)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <input type="number" id="pageNum" value="1" min="1" onchange="goToPage(this.value)">
+      <span>/ <span id="totalPages">1</span></span>
+      <button class="btn" id="nextPage" onclick="changePage(1)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+    <button class="btn" id="editBtn" style="display:none" onclick="toggleEditMode()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Edit
+    </button>
+    <button class="btn" id="uploadNewBtn" style="display:none" onclick="resetApp()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      New
+    </button>
+    <button class="btn btn-accent" id="saveBtn" style="display:none" onclick="saveAndDownload()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      Save PDF
+    </button>
+  </div>
+</header>
+
+<!-- TOOLBAR -->
+<div class="toolbar" id="toolbar">
+  <label class="tool-label">Tools</label>
+
+  <button class="tool-btn active" data-tool="draw" onclick="setTool('draw')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+    <span class="tooltip">Freehand Draw</span>
+  </button>
+
+  <button class="tool-btn" data-tool="line" onclick="setTool('line')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/></svg>
+    <span class="tooltip">Line</span>
+  </button>
+
+  <button class="tool-btn" data-tool="rect" onclick="setTool('rect')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+    <span class="tooltip">Rectangle</span>
+  </button>
+
+  <button class="tool-btn" data-tool="circle" onclick="setTool('circle')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>
+    <span class="tooltip">Circle</span>
+  </button>
+
+  <button class="tool-btn" data-tool="arrow" onclick="setTool('arrow')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    <span class="tooltip">Arrow</span>
+  </button>
+
+  <button class="tool-btn" data-tool="highlight" onclick="setTool('highlight')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l-6 6v3h9l3-3"/><path d="M22 12l-4.6 4.6a2 2 0 01-2.8 0l-5.2-5.2a2 2 0 010-2.8L14 4"/></svg>
+    <span class="tooltip">Highlight</span>
+  </button>
+
+  <button class="tool-btn" data-tool="text" onclick="setTool('text')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9.5" y1="20" x2="14.5" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+    <span class="tooltip">Add Text</span>
+  </button>
+
+  <button class="tool-btn" data-tool="eraser" onclick="setTool('eraser')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7l-3-3a1 1 0 010-1.41l9.12-9.13a2 2 0 012.83 0L20.5 11a2 2 0 010 2.83L14 20"/></svg>
+    <span class="tooltip">Eraser</span>
+  </button>
+
+  <div class="sep"></div>
+
+  <label class="tool-label">Color</label>
+  <div class="color-pick">
+    <input type="color" id="colorPicker" value="#ff6b3d" onchange="currentColor=this.value">
+  </div>
+
+  <div class="sep"></div>
+
+  <label class="tool-label">Size</label>
+  <input type="range" class="size-slider" id="sizeSlider" min="1" max="20" value="3" oninput="currentSize=+this.value">
+
+  <div class="sep"></div>
+
+  <label class="tool-label">Font</label>
+  <select id="fontSizeSelect" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:13px;font-family:'DM Sans',sans-serif;">
+    <option value="14">14px</option>
+    <option value="18" selected>18px</option>
+    <option value="24">24px</option>
+    <option value="32">32px</option>
+    <option value="48">48px</option>
+  </select>
+
+  <div class="sep"></div>
+
+  <button class="btn" onclick="undoAction()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
+    Undo
+  </button>
+  <button class="btn" onclick="clearOverlay()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+    Clear
+  </button>
+</div>
+
+<!-- MAIN -->
+<div class="main-area" id="mainArea">
+  <div class="upload-screen" id="uploadScreen">
+    <div class="upload-zone" id="uploadZone">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+      </div>
+      <h2>Drop your PDF here</h2>
+      <p>or click to browse files</p>
+      <div class="browse">Choose PDF</div>
+    </div>
+    <input type="file" id="fileInput" accept="application/pdf">
+  </div>
+
+  <div class="pdf-container" id="pdfContainer"></div>
+</div>
+
+<!-- ZOOM -->
+<div class="zoom-controls" id="zoomControls">
+  <button onclick="adjustZoom(-0.15)">−</button>
+  <span id="zoomLevel">100%</span>
+  <button onclick="adjustZoom(0.15)">+</button>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <div style="color:var(--text-dim);font-size:14px;" id="loadingMsg">Processing PDF...</div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── State ──
+let pdfDoc = null;
+let pdfBytes = null;
+let currentPage = 1;
+let totalPagesCount = 1;
+let scale = 1.5;
+let editMode = false;
+let currentTool = 'draw';
+let currentColor = '#ff6b3d';
+let currentSize = 3;
+
+// Per-page annotation storage
+const pageDrawings = {};   // page -> [{type, data}]
+const pageTexts = {};      // page -> [{x,y,text,fontSize,color}]
+const undoStacks = {};     // page -> []
+
+let isDrawing = false;
+let startX, startY;
+let overlayCtx = null;
+let overlayCanvas = null;
+let currentPath = [];
+
+// ── Upload Handling ──
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => { if(e.target.files[0]) loadPDF(e.target.files[0]); });
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if(f && f.type === 'application/pdf') loadPDF(f);
+  else showToast('Please drop a PDF file');
+});
+
+async function loadPDF(file) {
+  showLoading('Loading PDF...');
+  document.getElementById('fileName').textContent = file.name;
+  const arrayBuf = await file.arrayBuffer();
+  pdfBytes = new Uint8Array(arrayBuf);
+
+  try {
+    pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
+    totalPagesCount = pdfDoc.numPages;
+    document.getElementById('totalPages').textContent = totalPagesCount;
+    currentPage = 1;
+
+    document.getElementById('uploadScreen').style.display = 'none';
+    document.getElementById('pdfContainer').classList.add('visible');
+    document.getElementById('pageInfo').style.display = 'flex';
+    document.getElementById('editBtn').style.display = 'flex';
+    document.getElementById('saveBtn').style.display = 'flex';
+    document.getElementById('uploadNewBtn').style.display = 'flex';
+    document.getElementById('zoomControls').classList.add('visible');
+
+    await renderPage(currentPage);
+    hideLoading();
+    showToast('PDF loaded. Click Edit to start annotating.');
+  } catch(err) {
+    hideLoading();
+    showToast('Failed to load PDF: ' + err.message);
+  }
+}
+
+async function renderPage(num) {
+  const page = await pdfDoc.getPage(num);
+  const viewport = page.getViewport({ scale });
+
+  const container = document.getElementById('pdfContainer');
+  container.innerHTML = '';
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'page-wrapper';
+  wrapper.style.width = viewport.width + 'px';
+  wrapper.style.height = viewport.height + 'px';
+
+  // PDF canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  wrapper.appendChild(canvas);
+
+  // Overlay canvas for drawings
+  overlayCanvas = document.createElement('canvas');
+  overlayCanvas.className = 'overlay-canvas';
+  overlayCanvas.width = viewport.width;
+  overlayCanvas.height = viewport.height;
+  overlayCanvas.style.width = viewport.width + 'px';
+  overlayCanvas.style.height = viewport.height + 'px';
+  overlayCanvas.style.pointerEvents = editMode ? 'auto' : 'none';
+  overlayCtx = overlayCanvas.getContext('2d');
+  wrapper.appendChild(overlayCanvas);
+
+  // Text annotations layer
+  const textLayer = document.createElement('div');
+  textLayer.className = 'text-annotations';
+  textLayer.id = 'textLayer';
+  textLayer.style.pointerEvents = editMode ? 'auto' : 'none';
+  wrapper.appendChild(textLayer);
+
+  container.appendChild(wrapper);
+
+  // Re-draw stored drawings
+  replayDrawings(num);
+  // Re-create stored text annotations
+  replayTexts(num);
+
+  // Bind events
+  overlayCanvas.addEventListener('mousedown', onMouseDown);
+  overlayCanvas.addEventListener('mousemove', onMouseMove);
+  overlayCanvas.addEventListener('mouseup', onMouseUp);
+  overlayCanvas.addEventListener('mouseleave', onMouseUp);
+  // Touch
+  overlayCanvas.addEventListener('touchstart', onTouchStart, {passive:false});
+  overlayCanvas.addEventListener('touchmove', onTouchMove, {passive:false});
+  overlayCanvas.addEventListener('touchend', onTouchEnd);
+
+  // Click for text tool
+  overlayCanvas.addEventListener('click', onCanvasClick);
+
+  document.getElementById('pageNum').value = num;
+  updateZoomLabel();
+}
+
+// ── Drawing Logic ──
+function getPos(e) {
+  const r = overlayCanvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function getTouchPos(e) {
+  const t = e.touches[0];
+  const r = overlayCanvas.getBoundingClientRect();
+  return { x: t.clientX - r.left, y: t.clientY - r.top };
+}
+
+function onMouseDown(e) {
+  if(!editMode || currentTool === 'text') return;
+  const p = getPos(e);
+  startDraw(p);
+}
+function onMouseMove(e) {
+  if(!isDrawing) return;
+  const p = getPos(e);
+  continueDraw(p);
+}
+function onMouseUp(e) {
+  if(!isDrawing) return;
+  endDraw();
+}
+function onTouchStart(e) {
+  e.preventDefault();
+  if(!editMode || currentTool === 'text') return;
+  startDraw(getTouchPos(e));
+}
+function onTouchMove(e) {
+  e.preventDefault();
+  if(!isDrawing) return;
+  continueDraw(getTouchPos(e));
+}
+function onTouchEnd(e) { if(isDrawing) endDraw(); }
+
+function startDraw(p) {
+  isDrawing = true;
+  startX = p.x; startY = p.y;
+  currentPath = [p];
+  if(currentTool === 'draw' || currentTool === 'eraser' || currentTool === 'highlight') {
+    overlayCtx.beginPath();
+    overlayCtx.moveTo(p.x, p.y);
+  }
+}
+
+function continueDraw(p) {
+  if(currentTool === 'draw') {
+    overlayCtx.strokeStyle = currentColor;
+    overlayCtx.lineWidth = currentSize;
+    overlayCtx.lineCap = 'round';
+    overlayCtx.lineJoin = 'round';
+    overlayCtx.globalAlpha = 1;
+    overlayCtx.globalCompositeOperation = 'source-over';
+    overlayCtx.lineTo(p.x, p.y);
+    overlayCtx.stroke();
+    currentPath.push(p);
+  } else if(currentTool === 'highlight') {
+    overlayCtx.strokeStyle = currentColor;
+    overlayCtx.lineWidth = currentSize * 6;
+    overlayCtx.lineCap = 'round';
+    overlayCtx.lineJoin = 'round';
+    overlayCtx.globalAlpha = 0.3;
+    overlayCtx.globalCompositeOperation = 'source-over';
+    overlayCtx.lineTo(p.x, p.y);
+    overlayCtx.stroke();
+    currentPath.push(p);
+  } else if(currentTool === 'eraser') {
+    overlayCtx.globalCompositeOperation = 'destination-out';
+    overlayCtx.lineWidth = currentSize * 4;
+    overlayCtx.lineCap = 'round';
+    overlayCtx.lineTo(p.x, p.y);
+    overlayCtx.stroke();
+    currentPath.push(p);
+  } else {
+    // preview shapes
+    replayDrawings(currentPage);
+    overlayCtx.strokeStyle = currentColor;
+    overlayCtx.lineWidth = currentSize;
+    overlayCtx.lineCap = 'round';
+    overlayCtx.globalAlpha = 1;
+    overlayCtx.globalCompositeOperation = 'source-over';
+    if(currentTool === 'line') {
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(startX, startY);
+      overlayCtx.lineTo(p.x, p.y);
+      overlayCtx.stroke();
+    } else if(currentTool === 'arrow') {
+      drawArrow(overlayCtx, startX, startY, p.x, p.y);
+    } else if(currentTool === 'rect') {
+      overlayCtx.strokeRect(startX, startY, p.x-startX, p.y-startY);
+    } else if(currentTool === 'circle') {
+      const rx = Math.abs(p.x-startX)/2, ry = Math.abs(p.y-startY)/2;
+      overlayCtx.beginPath();
+      overlayCtx.ellipse(startX + (p.x-startX)/2, startY + (p.y-startY)/2, rx, ry, 0, 0, Math.PI*2);
+      overlayCtx.stroke();
+    }
+  }
+}
+
+function endDraw() {
+  isDrawing = false;
+  overlayCtx.globalAlpha = 1;
+  overlayCtx.globalCompositeOperation = 'source-over';
+
+  if(!pageDrawings[currentPage]) pageDrawings[currentPage] = [];
+  if(!undoStacks[currentPage]) undoStacks[currentPage] = [];
+
+  if(currentTool === 'draw' || currentTool === 'highlight') {
+    pageDrawings[currentPage].push({
+      type: currentTool,
+      path: [...currentPath],
+      color: currentColor,
+      size: currentTool === 'highlight' ? currentSize*6 : currentSize,
+      alpha: currentTool === 'highlight' ? 0.3 : 1
+    });
+    undoStacks[currentPage].push({ action: 'draw', index: pageDrawings[currentPage].length - 1 });
+  } else if(currentTool === 'eraser') {
+    pageDrawings[currentPage].push({
+      type: 'eraser',
+      path: [...currentPath],
+      size: currentSize * 4
+    });
+    undoStacks[currentPage].push({ action: 'draw', index: pageDrawings[currentPage].length - 1 });
+  } else if(['line','arrow','rect','circle'].includes(currentTool)) {
+    const endP = currentPath.length > 1 ? currentPath[currentPath.length-1] : {x:startX, y:startY};
+    pageDrawings[currentPage].push({
+      type: currentTool,
+      startX, startY,
+      endX: endP.x, endY: endP.y,
+      color: currentColor,
+      size: currentSize
+    });
+    undoStacks[currentPage].push({ action: 'draw', index: pageDrawings[currentPage].length - 1 });
+  }
+  currentPath = [];
+}
+
+function drawArrow(ctx, fx, fy, tx, ty) {
+  const headLen = 14;
+  const angle = Math.atan2(ty - fy, tx - fx);
+  ctx.beginPath();
+  ctx.moveTo(fx, fy);
+  ctx.lineTo(tx, ty);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(tx, ty);
+  ctx.lineTo(tx - headLen*Math.cos(angle - Math.PI/6), ty - headLen*Math.sin(angle - Math.PI/6));
+  ctx.moveTo(tx, ty);
+  ctx.lineTo(tx - headLen*Math.cos(angle + Math.PI/6), ty - headLen*Math.sin(angle + Math.PI/6));
+  ctx.stroke();
+}
+
+function replayDrawings(page) {
+  if(!overlayCtx) return;
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+  const draws = pageDrawings[page] || [];
+  for(const d of draws) {
+    if(d.type === 'draw' || d.type === 'highlight') {
+      overlayCtx.globalAlpha = d.alpha || 1;
+      overlayCtx.globalCompositeOperation = 'source-over';
+      overlayCtx.strokeStyle = d.color;
+      overlayCtx.lineWidth = d.size;
+      overlayCtx.lineCap = 'round';
+      overlayCtx.lineJoin = 'round';
+      overlayCtx.beginPath();
+      if(d.path.length > 0) {
+        overlayCtx.moveTo(d.path[0].x, d.path[0].y);
+        for(let i=1;i<d.path.length;i++) overlayCtx.lineTo(d.path[i].x, d.path[i].y);
+      }
+      overlayCtx.stroke();
+    } else if(d.type === 'eraser') {
+      overlayCtx.globalCompositeOperation = 'destination-out';
+      overlayCtx.lineWidth = d.size;
+      overlayCtx.lineCap = 'round';
+      overlayCtx.beginPath();
+      if(d.path.length > 0) {
+        overlayCtx.moveTo(d.path[0].x, d.path[0].y);
+        for(let i=1;i<d.path.length;i++) overlayCtx.lineTo(d.path[i].x, d.path[i].y);
+      }
+      overlayCtx.stroke();
+      overlayCtx.globalCompositeOperation = 'source-over';
+    } else if(d.type === 'line') {
+      overlayCtx.globalAlpha = 1;
+      overlayCtx.globalCompositeOperation = 'source-over';
+      overlayCtx.strokeStyle = d.color;
+      overlayCtx.lineWidth = d.size;
+      overlayCtx.lineCap = 'round';
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(d.startX, d.startY);
+      overlayCtx.lineTo(d.endX, d.endY);
+      overlayCtx.stroke();
+    } else if(d.type === 'arrow') {
+      overlayCtx.globalAlpha = 1;
+      overlayCtx.globalCompositeOperation = 'source-over';
+      overlayCtx.strokeStyle = d.color;
+      overlayCtx.lineWidth = d.size;
+      overlayCtx.lineCap = 'round';
+      drawArrow(overlayCtx, d.startX, d.startY, d.endX, d.endY);
+    } else if(d.type === 'rect') {
+      overlayCtx.globalAlpha = 1;
+      overlayCtx.globalCompositeOperation = 'source-over';
+      overlayCtx.strokeStyle = d.color;
+      overlayCtx.lineWidth = d.size;
+      overlayCtx.strokeRect(d.startX, d.startY, d.endX-d.startX, d.endY-d.startY);
+    } else if(d.type === 'circle') {
+      overlayCtx.globalAlpha = 1;
+      overlayCtx.globalCompositeOperation = 'source-over';
+      overlayCtx.strokeStyle = d.color;
+      overlayCtx.lineWidth = d.size;
+      const rx = Math.abs(d.endX-d.startX)/2, ry = Math.abs(d.endY-d.startY)/2;
+      overlayCtx.beginPath();
+      overlayCtx.ellipse(d.startX + (d.endX-d.startX)/2, d.startY + (d.endY-d.startY)/2, rx, ry, 0, 0, Math.PI*2);
+      overlayCtx.stroke();
+    }
+  }
+  overlayCtx.globalAlpha = 1;
+  overlayCtx.globalCompositeOperation = 'source-over';
+}
+
+// ── Text Annotations ──
+function onCanvasClick(e) {
+  if(!editMode || currentTool !== 'text') return;
+  const p = getPos(e);
+  addTextAnnotation(p.x, p.y);
+}
+
+function addTextAnnotation(x, y, text='', fontSize=null, color=null) {
+  const layer = document.getElementById('textLayer');
+  const div = document.createElement('div');
+  div.className = 'text-annotation';
+  div.contentEditable = editMode ? 'true' : 'false';
+  div.style.left = x + 'px';
+  div.style.top = y + 'px';
+  div.style.fontSize = (fontSize || document.getElementById('fontSizeSelect').value) + 'px';
+  div.style.color = color || currentColor;
+  div.textContent = text || '';
+
+  const del = document.createElement('button');
+  del.className = 'delete-ann';
+  del.innerHTML = '×';
+  del.onclick = () => { div.remove(); syncTexts(); };
+  div.appendChild(del);
+
+  // Dragging
+  let isDragging = false, ox, oy;
+  div.addEventListener('mousedown', (e) => {
+    if(e.target === del) return;
+    if(!editMode) return;
+    isDragging = true;
+    ox = e.offsetX; oy = e.offsetY;
+    div.style.cursor = 'grabbing';
+  });
+  document.addEventListener('mousemove', (e) => {
+    if(!isDragging) return;
+    const rect = layer.getBoundingClientRect();
+    div.style.left = (e.clientX - rect.left - ox) + 'px';
+    div.style.top = (e.clientY - rect.top - oy) + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if(isDragging) { isDragging = false; div.style.cursor = 'move'; syncTexts(); }
+  });
+
+  div.addEventListener('input', () => syncTexts());
+  layer.appendChild(div);
+  if(!text) div.focus();
+  syncTexts();
+}
+
+function syncTexts() {
+  const layer = document.getElementById('textLayer');
+  if(!layer) return;
+  const anns = layer.querySelectorAll('.text-annotation');
+  pageTexts[currentPage] = [];
+  anns.forEach(a => {
+    pageTexts[currentPage].push({
+      x: parseFloat(a.style.left),
+      y: parseFloat(a.style.top),
+      text: a.textContent.replace('×','').trim(),
+      fontSize: parseInt(a.style.fontSize),
+      color: a.style.color
+    });
+  });
+}
+
+function replayTexts(page) {
+  const texts = pageTexts[page] || [];
+  texts.forEach(t => {
+    if(t.text) addTextAnnotation(t.x, t.y, t.text, t.fontSize, t.color);
+  });
+}
+
+// ── Tools ──
+function setTool(t) {
+  currentTool = t;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
+  if(overlayCanvas) overlayCanvas.style.cursor = t === 'text' ? 'text' : 'crosshair';
+}
+
+function toggleEditMode() {
+  editMode = !editMode;
+  const btn = document.getElementById('editBtn');
+  const tb = document.getElementById('toolbar');
+  btn.classList.toggle('btn-accent', editMode);
+  btn.innerHTML = editMode
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Editing'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit';
+  tb.classList.toggle('visible', editMode);
+
+  if(overlayCanvas) overlayCanvas.style.pointerEvents = editMode ? 'auto' : 'none';
+  const tl = document.getElementById('textLayer');
+  if(tl) {
+    tl.style.pointerEvents = editMode ? 'auto' : 'none';
+    tl.querySelectorAll('.text-annotation').forEach(a => a.contentEditable = editMode ? 'true' : 'false');
+  }
+}
+
+function undoAction() {
+  const stack = undoStacks[currentPage];
+  if(!stack || !stack.length) return;
+  const last = stack.pop();
+  if(last.action === 'draw') {
+    pageDrawings[currentPage].splice(last.index, 1);
+    replayDrawings(currentPage);
+  }
+}
+
+function clearOverlay() {
+  pageDrawings[currentPage] = [];
+  undoStacks[currentPage] = [];
+  pageTexts[currentPage] = [];
+  if(overlayCtx) overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+  const tl = document.getElementById('textLayer');
+  if(tl) tl.innerHTML = '';
+}
+
+// ── Pagination ──
+async function changePage(dir) {
+  syncTexts();
+  const newP = currentPage + dir;
+  if(newP < 1 || newP > totalPagesCount) return;
+  currentPage = newP;
+  await renderPage(currentPage);
+}
+async function goToPage(v) {
+  syncTexts();
+  const n = parseInt(v);
+  if(n >= 1 && n <= totalPagesCount) { currentPage = n; await renderPage(currentPage); }
+}
+
+// ── Zoom ──
+function adjustZoom(delta) {
+  syncTexts();
+  scale = Math.max(0.5, Math.min(4, scale + delta));
+  renderPage(currentPage);
+}
+function updateZoomLabel() {
+  document.getElementById('zoomLevel').textContent = Math.round(scale / 1.5 * 100) + '%';
+}
+
+// ── Save & Download ──
+async function saveAndDownload() {
+  syncTexts();
+  showLoading('Flattening annotations into PDF...');
+
+  try {
+    const { PDFDocument, rgb, StandardFonts } = PDFLib;
+    const pdfDocLib = await PDFDocument.load(pdfBytes);
+    const pages = pdfDocLib.getPages();
+    const font = await pdfDocLib.embedFont(StandardFonts.Helvetica);
+
+    for(let pg = 1; pg <= totalPagesCount; pg++) {
+      const page = pages[pg-1];
+      const { width: pw, height: ph } = page.getSize();
+
+      // We need to render the overlay at the correct scale to get proper coordinates
+      // Compute the scale factor between our canvas coords and the PDF page coords
+      const pgObj = await pdfDoc.getPage(pg);
+      const viewport = pgObj.getViewport({ scale });
+      const sx = pw / viewport.width;
+      const sy = ph / viewport.height;
+
+      // Draw drawings onto page
+      const draws = pageDrawings[pg] || [];
+      for(const d of draws) {
+        if(d.type === 'eraser') continue; // skip eraser for PDF export
+
+        const col = hexToRgb(d.color || '#000000');
+
+        if(d.type === 'draw' || d.type === 'highlight') {
+          if(d.path.length < 2) continue;
+          const alpha = d.alpha || 1;
+          for(let i=1; i<d.path.length; i++) {
+            page.drawLine({
+              start: { x: d.path[i-1].x * sx, y: ph - d.path[i-1].y * sy },
+              end: { x: d.path[i].x * sx, y: ph - d.path[i].y * sy },
+              thickness: d.size * sx,
+              color: rgb(col.r, col.g, col.b),
+              opacity: alpha,
+            });
+          }
+        } else if(d.type === 'line' || d.type === 'arrow') {
+          page.drawLine({
+            start: { x: d.startX * sx, y: ph - d.startY * sy },
+            end: { x: d.endX * sx, y: ph - d.endY * sy },
+            thickness: d.size * sx,
+            color: rgb(col.r, col.g, col.b),
+          });
+          if(d.type === 'arrow') {
+            const headLen = 10 * sx;
+            const angle = Math.atan2((d.endY - d.startY)*sy, (d.endX - d.startX)*sx);
+            const ex = d.endX * sx, ey = ph - d.endY * sy;
+            page.drawLine({
+              start: { x: ex, y: ey },
+              end: { x: ex - headLen*Math.cos(angle - Math.PI/6), y: ey + headLen*Math.sin(angle - Math.PI/6) },
+              thickness: d.size * sx,
+              color: rgb(col.r, col.g, col.b),
+            });
+            page.drawLine({
+              start: { x: ex, y: ey },
+              end: { x: ex - headLen*Math.cos(angle + Math.PI/6), y: ey + headLen*Math.sin(angle + Math.PI/6) },
+              thickness: d.size * sx,
+              color: rgb(col.r, col.g, col.b),
+            });
+          }
+        } else if(d.type === 'rect') {
+          const x = Math.min(d.startX, d.endX) * sx;
+          const y = Math.min(d.startY, d.endY) * sy;
+          const w = Math.abs(d.endX - d.startX) * sx;
+          const h = Math.abs(d.endY - d.startY) * sy;
+          page.drawRectangle({
+            x, y: ph - y - h, width: w, height: h,
+            borderColor: rgb(col.r, col.g, col.b),
+            borderWidth: d.size * sx,
+          });
+        } else if(d.type === 'circle') {
+          const cx = (d.startX + d.endX)/2 * sx;
+          const cy = ph - (d.startY + d.endY)/2 * sy;
+          const rx = Math.abs(d.endX - d.startX)/2 * sx;
+          const ry = Math.abs(d.endY - d.startY)/2 * sy;
+          page.drawEllipse({
+            x: cx, y: cy, xScale: rx, yScale: ry,
+            borderColor: rgb(col.r, col.g, col.b),
+            borderWidth: d.size * sx,
+          });
+        }
+      }
+
+      // Draw text annotations
+      const texts = pageTexts[pg] || [];
+      for(const t of texts) {
+        if(!t.text) continue;
+        const col = parseColor(t.color);
+        const fs = (t.fontSize || 18) * sx;
+        page.drawText(t.text, {
+          x: t.x * sx,
+          y: ph - t.y * sy - fs,
+          size: fs,
+          font,
+          color: rgb(col.r, col.g, col.b),
+        });
+      }
+    }
+
+    const editedBytes = await pdfDocLib.save();
+    const blob = new Blob([editedBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const origName = document.getElementById('fileName').textContent || 'document.pdf';
+    a.href = url;
+    a.download = origName.replace('.pdf','') + '_edited.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    hideLoading();
+    showToast('PDF saved and downloading!');
+  } catch(err) {
+    hideLoading();
+    showToast('Save failed: ' + err.message);
+    console.error(err);
+  }
+}
+
+function hexToRgb(hex) {
+  hex = hex.replace('#','');
+  if(hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
+  return {
+    r: parseInt(hex.substring(0,2),16)/255,
+    g: parseInt(hex.substring(2,4),16)/255,
+    b: parseInt(hex.substring(4,6),16)/255
+  };
+}
+
+function parseColor(str) {
+  if(!str) return {r:0,g:0,b:0};
+  if(str.startsWith('#')) return hexToRgb(str);
+  const m = str.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if(m) return { r: +m[1]/255, g: +m[2]/255, b: +m[3]/255 };
+  return {r:0,g:0,b:0};
+}
+
+// ── Reset ──
+function resetApp() {
+  pdfDoc = null;
+  pdfBytes = null;
+  currentPage = 1;
+  editMode = false;
+  Object.keys(pageDrawings).forEach(k => delete pageDrawings[k]);
+  Object.keys(pageTexts).forEach(k => delete pageTexts[k]);
+  Object.keys(undoStacks).forEach(k => delete undoStacks[k]);
+
+  document.getElementById('pdfContainer').classList.remove('visible');
+  document.getElementById('pdfContainer').innerHTML = '';
+  document.getElementById('uploadScreen').style.display = 'flex';
+  document.getElementById('pageInfo').style.display = 'none';
+  document.getElementById('editBtn').style.display = 'none';
+  document.getElementById('saveBtn').style.display = 'none';
+  document.getElementById('uploadNewBtn').style.display = 'none';
+  document.getElementById('toolbar').classList.remove('visible');
+  document.getElementById('zoomControls').classList.remove('visible');
+  document.getElementById('fileName').textContent = '';
+  document.getElementById('editBtn').classList.remove('btn-accent');
+  fileInput.value = '';
+}
+
+// ── Helpers ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+function showLoading(msg) {
+  document.getElementById('loadingMsg').textContent = msg || 'Processing...';
+  document.getElementById('loading').classList.add('visible');
+}
+function hideLoading() {
+  document.getElementById('loading').classList.remove('visible');
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if(e.ctrlKey && e.key === 'z') { undoAction(); e.preventDefault(); }
+  if(e.ctrlKey && e.key === 's') { saveAndDownload(); e.preventDefault(); }
+});
+</script>
+</body>
+</html>
